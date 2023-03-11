@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -24,6 +25,8 @@ namespace Siccity.GLTFUtility {
 		public int? bufferView;
 		public string name;
 
+		private static Regex assetsRegex = new Regex("[\\\\/][Aa]ssets[\\\\/]");
+
 		public class ImportResult {
 			public byte[] bytes;
 			public string path;
@@ -36,8 +39,16 @@ namespace Siccity.GLTFUtility {
 			public IEnumerator CreateTextureAsync(bool linear, Action<Texture2D> onFinish, Action<float> onProgress = null) {
 				if (!string.IsNullOrEmpty(path)) {
 #if UNITY_EDITOR
+					string assetPath = path;
+					if (!assetPath.StartsWith("Assets")) {
+						// If the path isn't relative to the project root directory, then try to make it that way.
+						Match match = assetsRegex.Match(assetPath);
+						if (match.Success) {
+							assetPath = assetPath.Substring(match.Index+1);
+						}
+					}
 					// Load textures from asset database if we can
-					Texture2D assetTexture = UnityEditor.AssetDatabase.LoadAssetAtPath(path, typeof(Texture2D)) as Texture2D;
+					Texture2D assetTexture = UnityEditor.AssetDatabase.LoadAssetAtPath(assetPath, typeof(Texture2D)) as Texture2D;
 					if (assetTexture != null) {
 						onFinish(assetTexture);
 						if (onProgress != null) onProgress(1f);
@@ -104,6 +115,8 @@ namespace Siccity.GLTFUtility {
 								string content = images[i].uri.Split(',').Last();
 								byte[] imageBytes = Convert.FromBase64String(content);
 								Result[i] = new ImportResult(imageBytes);
+							} else { // <- NEW
+								Debug.Log("Couldn't load texture at " + fullUri); // <- NEW
 							}
 						} else if (images[i].bufferView.HasValue && !string.IsNullOrEmpty(images[i].mimeType)) {
 							GLTFBufferView.ImportResult view = bufferViewTask.Result[images[i].bufferView.Value];
